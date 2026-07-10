@@ -29,10 +29,34 @@ This server indexes your markdown notes into a Qdrant vector database using embe
 - `CHUNK_OVERLAP`: Overlap between chunks (default: `200`).
 
 ## Running
-Build and run the Docker container:
+Build and run the Docker container. Make sure to mount your markdown notes directory and a path for the persistent cache database:
 ```sh
 docker build -t notes-rag-mcp .
-docker run -p 3000:3000 --env-file .env notes-rag-mcp
+
+# Replace /path/to/notes with the actual path to your markdown files
+docker run -d \
+  -p 3000:3000 \
+  --env-file .env \
+  -v /path/to/notes:/notes:ro \
+  -v ./data:/app/data \
+  notes-rag-mcp
+```
+*Note: Make sure to update the `VAULT_PATH` environment variable to match the internal mounted path (e.g. `/notes`).*
+
+## Connecting MCP Clients
+Since this server runs via HTTP with Server-Sent Events (SSE), you can configure your AI client (like Claude Desktop or Gemini) to connect to the `/sse` endpoint. 
+
+Example configuration for an MCP client `settings.json`:
+```json
+{
+  "mcpServers": {
+    "notes-rag": {
+      "url": "http://localhost:3000/sse",
+      "type": "sse",
+      "trust": true
+    }
+  }
+}
 ```
 
 ## Changelog
