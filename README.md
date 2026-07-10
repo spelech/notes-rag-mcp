@@ -34,3 +34,6 @@ Build and run the Docker container:
 docker build -t notes-rag-mcp .
 docker run -p 3000:3000 --env-file .env notes-rag-mcp
 ```
+
+## Changelog
+- **v1.0.1**: Updated Python MCP SDK SSE transport method from `connect_retrying` to `connect_sse` to fix `AttributeError` during initialization and ensure compatibility with modern MCP clients.

@@ -776,7 +776,7 @@ app.mount("/admin", StaticFiles(directory="www", html=True), name="admin")
 @app.get("/sse")
 async def sse_endpoint(request: Request):
     logger.info("New SSE client connection requested.")
-    async with sse_transport.connect_retrying(request.scope, request.receive, request._send) as (read_stream, write_stream):
+    async with sse_transport.connect_sse(request.scope, request.receive, request._send) as (read_stream, write_stream):
         await mcp_server.run(
             read_stream,
             write_stream,
