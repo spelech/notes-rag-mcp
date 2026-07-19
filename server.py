@@ -465,7 +465,7 @@ def run_indexing():
         indexing_lock.release()
 
 # Initialize MCP server
-mcp_server = Server("notes-rag-mcp")
+mcp_server = Server("notes-rag-mcp", version="1.0.1")
 
 @mcp_server.list_tools()
 async def list_tools() -> List[Tool]:
@@ -534,12 +534,13 @@ async def call_tool(name: str, arguments: dict) -> List[TextContent]:
             query_filter = qmodels.Filter(must=must_conditions) if must_conditions else None
 
             # Perform search
-            search_results = qdrant.search(
+            response = qdrant.query_points(
                 collection_name=COLLECTION_NAME,
-                query_vector=query_vector,
+                query=query_vector,
                 query_filter=query_filter,
                 limit=limit
             )
+            search_results = response.points
 
             # Format outputs
             if not search_results:
@@ -600,7 +601,7 @@ async def call_tool(name: str, arguments: dict) -> List[TextContent]:
 
 # FastAPI setup to support SSE
 app = FastAPI(title="Notes RAG MCP Server")
-sse_transport = SseServerTransport("/messages")
+sse_transport = SseServerTransport("/messages/")
 
 # ----------------------------------------------------
 # ADMIN DASHBOARD API ENDPOINTS
@@ -783,9 +784,7 @@ async def sse_endpoint(request: Request):
             mcp_server.create_initialization_options()
         )
 
-@app.post("/messages")
-async def messages_endpoint(request: Request):
-    await sse_transport.handle_post_request(request.scope, request.receive, request._send)
+app.mount("/messages", sse_transport.handle_post_message)
 
 # Health check endpoint
 @app.get("/health")
