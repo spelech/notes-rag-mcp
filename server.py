@@ -31,8 +31,9 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
 LITELLM_URL = os.getenv("LITELLM_URL", "http://litellm:4000/v1")
 LITELLM_API_KEY = os.getenv("LITELLM_API_KEY", "dummy")
 COLLECTION_NAME = os.getenv("COLLECTION_NAME", "notes_rag")
-VAULT_PATH = os.getenv("VAULT_PATH", "/containers/productivity/obsidian/shared")
+VAULT_PATH = os.getenv("VAULT_PATH", "/docs")
 CACHE_DB_PATH = os.getenv("CACHE_DB_PATH", "/app/data/index_cache.db")
+
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1500"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
 
@@ -656,7 +657,8 @@ def run_indexing():
 
 
 # Initialize MCP server
-mcp_server = Server("notes-rag-mcp", version="1.0.1")
+mcp_server = Server("notes-rag-mcp", version="1.1.0")
+
 
 @mcp_server.list_tools()
 async def list_tools() -> List[Tool]:
