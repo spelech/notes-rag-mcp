@@ -109,12 +109,16 @@ Connect any MCP-compliant client (VS Code, Cursor, Antigravity CLI, or Claude De
 
 ## 📝 Changelog
 
+- **v1.3.0**:
+  - Implemented SSE active session tracking and JSON-RPC `notifications/tools/list_changed`, `notifications/prompts/list_changed`, and `notifications/resources/list_changed` events.
+  - Automatically triggers list_changed notifications to connected gateway routers (like `mcp-router`) whenever indexing completes or paths/prompts are updated.
 - **v1.2.0**:
   - Added dynamic custom MCP prompt storage in SQLite (`custom_prompts` table).
   - Seeded default infrastructure and codebase prompt templates on DB initialization.
   - Implemented dynamic `@mcp_server.list_prompts()` and `@mcp_server.get_prompt()` handlers.
   - Added prompt management REST APIs (`GET`, `POST`, `DELETE` `/admin/api/prompts`).
   - Added Custom MCP Prompts card and modal to the Admin Dashboard.
+
 - **v1.1.0**:
   - Integrated FastEmbed in-process CPU local ONNX embedding engine (`BAAI/bge-small-en-v1.5`).
   - Added topic & keyword extraction engine (`file_summaries` SQLite table).

@@ -6,6 +6,9 @@ import sqlite3
 import hashlib
 import logging
 import threading
+import asyncio
+import anyio
+from contextlib import AsyncExitStack
 import concurrent.futures
 from collections import Counter
 from typing import Optional, List, Dict, Any
@@ -13,6 +16,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from mcp.server import Server
+from mcp.server.session import ServerSession
 from mcp.server.sse import SseServerTransport
 from mcp.types import Tool, TextContent, Resource, Prompt, PromptMessage, PromptArgument
 from qdrant_client import QdrantClient
@@ -23,6 +27,27 @@ import frontmatter
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("notes-rag-mcp")
+
+# Active sessions and event loop tracking for list_changed notifications
+active_sessions = set()
+main_event_loop = None
+
+async def notify_list_changed():
+    if not active_sessions:
+        return
+    logger.info(f"Sending list_changed notifications to {len(active_sessions)} active sessions...")
+    for session in list(active_sessions):
+        try:
+            await session.send_tool_list_changed()
+            await session.send_prompt_list_changed()
+            await session.send_resource_list_changed()
+        except Exception as e:
+            logger.warning(f"Failed to send list_changed notification to session: {e}")
+
+def trigger_list_changed_notification():
+    if main_event_loop and main_event_loop.is_running():
+        asyncio.run_coroutine_threadsafe(notify_list_changed(), main_event_loop)
+
 
 # Environment configurations
 QDRANT_URL = os.getenv("QDRANT_URL", "http://qdrant:6333")
@@ -687,14 +712,17 @@ def run_indexing():
         import datetime
         last_indexed_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         set_metadata("last_indexed", last_indexed_time)
+        trigger_list_changed_notification()
         return True
     finally:
         is_indexing = False
         indexing_lock.release()
 
 
+
 # Initialize MCP server
-mcp_server = Server("notes-rag-mcp", version="1.2.0")
+mcp_server = Server("notes-rag-mcp", version="1.3.0")
+
 
 
 
@@ -1107,6 +1135,7 @@ async def add_prompt(request: Request):
             )
             conn.commit()
 
+        trigger_list_changed_notification()
         return {"status": "success", "message": f"Added custom prompt '{name}'"}
     except sqlite3.IntegrityError:
         return JSONResponse(status_code=400, content={"error": f"Prompt '{name}' already exists."})
@@ -1119,7 +1148,10 @@ async def delete_prompt(prompt_id: int):
         with get_db_connection() as conn:
             conn.execute("DELETE FROM custom_prompts WHERE id = ?", (prompt_id,))
             conn.commit()
+
+        trigger_list_changed_notification()
         return {"status": "success", "message": f"Deleted prompt ID {prompt_id}"}
+
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
@@ -1183,11 +1215,34 @@ app.mount("/admin", StaticFiles(directory="www", html=True), name="admin")
 async def sse_endpoint(request: Request):
     logger.info("New SSE client connection requested.")
     async with sse_transport.connect_sse(request.scope, request.receive, request._send) as (read_stream, write_stream):
-        await mcp_server.run(
-            read_stream,
-            write_stream,
-            mcp_server.create_initialization_options()
-        )
+        initialization_options = mcp_server.create_initialization_options()
+        async with AsyncExitStack() as stack:
+            lifespan_context = await stack.enter_async_context(mcp_server.lifespan(mcp_server))
+            session = await stack.enter_async_context(
+                ServerSession(
+                    read_stream,
+                    write_stream,
+                    initialization_options,
+                )
+            )
+            active_sessions.add(session)
+            logger.info(f"Registered active session {session}. Total active: {len(active_sessions)}")
+            try:
+                async with anyio.create_task_group() as tg:
+                    try:
+                        async for message in session.incoming_messages:
+                            tg.start_soon(
+                                mcp_server._handle_message,
+                                message,
+                                session,
+                                lifespan_context,
+                                False,
+                            )
+                    finally:
+                        tg.cancel_scope.cancel()
+            finally:
+                active_sessions.discard(session)
+                logger.info(f"Unregistered session {session}. Remaining active: {len(active_sessions)}")
 
 app.mount("/messages", sse_transport.handle_post_message)
 
@@ -1199,11 +1254,14 @@ async def health():
 # Run initial indexing on startup
 @app.on_event("startup")
 async def startup_event():
+    global main_event_loop
+    main_event_loop = asyncio.get_running_loop()
     logger.info("Server starting up...")
     try:
         threading.Thread(target=run_indexing, daemon=True).start()
     except Exception as e:
         logger.error(f"Error running initial index on startup: {e}")
+
 
 if __name__ == "__main__":
     import uvicorn
