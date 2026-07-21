@@ -22,6 +22,26 @@ async function loadStats() {
         document.getElementById('stat-vectors').textContent = data.points_count;
         document.getElementById('stat-last-indexed').textContent = data.last_indexed || 'Never';
         
+        if (data.embedding_provider && data.embedding_model) {
+            const providerEl = document.getElementById('stat-embedding-provider');
+            if (providerEl) {
+                providerEl.textContent = `${data.embedding_provider} (${data.embedding_model})`;
+            }
+        }
+        
+        if (data.top_keywords && Array.isArray(data.top_keywords)) {
+            const cloud = document.getElementById('topics-tag-cloud');
+            if (cloud) {
+                if (data.top_keywords.length === 0) {
+                    cloud.innerHTML = '<span style="font-size: 0.85rem; color: rgba(255,255,255,0.4);">No topics extracted yet. Trigger reindex to populate.</span>';
+                } else {
+                    cloud.innerHTML = data.top_keywords.map(kw => 
+                        `<span style="background: rgba(20, 184, 166, 0.15); border: 1px solid rgba(20, 184, 166, 0.3); color: #2dd4bf; padding: 3px 8px; border-radius: 4px; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace;">${kw}</span>`
+                    ).join('');
+                }
+            }
+        }
+        
         const indicator = document.getElementById('indexing-indicator');
         if (data.is_indexing) {
             indicator.innerHTML = '<span class="indicator indexing"></span> Indexing...';
@@ -32,6 +52,7 @@ async function loadStats() {
             document.getElementById('btn-reindex').disabled = false;
             document.getElementById('btn-reindex').innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> Reindex Source Files';
         }
+
     } catch (error) {
         console.error('Error loading stats:', error);
     }

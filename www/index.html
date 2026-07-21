@@ -60,7 +60,19 @@
                         <span><i class="fa-regular fa-clock" style="margin-right: 5px;"></i> Last Indexed:</span>
                         <span id="stat-last-indexed" style="font-weight: 600; font-family: 'JetBrains Mono', monospace; color: rgba(255, 255, 255, 0.85);">Never</span>
                     </div>
+                    <div class="stats-footer" style="margin-top: 8px; font-size: 0.8rem; color: rgba(255, 255, 255, 0.55); display: flex; justify-content: space-between; align-items: center;">
+                        <span><i class="fa-solid fa-microchip" style="margin-right: 5px;"></i> Model Engine:</span>
+                        <span id="stat-embedding-provider" style="font-weight: 600; font-family: 'JetBrains Mono', monospace; color: #2dd4bf;">Local ONNX</span>
+                    </div>
                 </div>
+
+                <div class="glass-card topics-card" style="margin-top: 20px;">
+                    <h2><i class="fa-solid fa-tags"></i> Extracted Topics & Key Concepts</h2>
+                    <div id="topics-tag-cloud" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px;">
+                        <span style="font-size: 0.85rem; color: rgba(255,255,255,0.4);">Scanning corpus...</span>
+                    </div>
+                </div>
+
 
                 <div class="glass-card actions-card">
                     <h2><i class="fa-solid fa-bolt"></i> Actions</h2>
