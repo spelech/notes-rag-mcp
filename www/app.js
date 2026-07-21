@@ -1,11 +1,14 @@
 document.addEventListener('DOMContentLoaded', () => {
     loadStats();
     loadPaths();
+    loadPrompts();
     
     // Poll stats and paths every 10s
     setInterval(loadStats, 10000);
     setInterval(loadPaths, 10000);
+    setInterval(loadPrompts, 10000);
 });
+
 
 // Cache global configs
 window.allPaths = [];
@@ -373,3 +376,108 @@ function escapeHtml(str) {
               .replace(/"/g, "&quot;")
               .replace(/'/g, "&#039;");
 }
+
+// ----------------------------------------------------
+// CUSTOM PROMPTS UI LOGIC
+// ----------------------------------------------------
+
+async function loadPrompts() {
+    try {
+        const response = await fetch('/admin/api/prompts');
+        if (!response.ok) throw new Error('Failed to fetch prompts');
+        const prompts = await response.json();
+        renderPrompts(prompts);
+    } catch (error) {
+        console.error('Error loading prompts:', error);
+    }
+}
+
+function renderPrompts(prompts) {
+    const tbody = document.getElementById('prompts-list-body');
+    if (!tbody) return;
+    if (prompts.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" class="empty-state">No custom MCP prompts configured. Click "Add Prompt" to create one.</td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = prompts.map(p => {
+        const argsStr = p.arguments && p.arguments.length > 0 
+            ? p.arguments.map(a => `<code style="font-size:0.75rem; background:rgba(255,255,255,0.1); padding:2px 4px; border-radius:3px;">{${escapeHtml(a.name)}}</code>`).join(' ') 
+            : '<span style="color:rgba(255,255,255,0.3)">None</span>';
+            
+        const previewText = p.template.length > 70 ? p.template.substring(0, 70) + '...' : p.template;
+
+        return `
+            <tr>
+                <td>
+                    <div style="font-weight:600; font-family:'JetBrains Mono', monospace; color:#2dd4bf;">${escapeHtml(p.name)}</div>
+                    <div style="font-size:0.75rem; margin-top:2px; color:rgba(255,255,255,0.5);">Args: ${argsStr}</div>
+                </td>
+                <td style="font-size:0.85rem; color:rgba(255,255,255,0.85);">${escapeHtml(p.description)}</td>
+                <td style="font-size:0.8rem; font-family:'JetBrains Mono', monospace; color:rgba(255,255,255,0.6);">${escapeHtml(previewText)}</td>
+                <td>
+                    <button class="btn btn-danger btn-sm" onclick="deletePrompt(${p.id})">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function openAddPromptModal() {
+    document.getElementById('prompt-name').value = '';
+    document.getElementById('prompt-desc').value = '';
+    document.getElementById('prompt-template').value = '';
+    document.getElementById('prompt-modal').style.display = 'flex';
+}
+
+function closePromptModal() {
+    document.getElementById('prompt-modal').style.display = 'none';
+}
+
+async function savePrompt(event) {
+    event.preventDefault();
+    const name = document.getElementById('prompt-name').value.trim();
+    const description = document.getElementById('prompt-desc').value.trim();
+    const template = document.getElementById('prompt-template').value.trim();
+
+    // Extract placeholders like {topic} from template to auto-populate arguments
+    const matches = template.match(/\{([a-zA-Z0-9_\-]+)\}/g) || [];
+    const args = Array.from(new Set(matches.map(m => m.slice(1, -1)))).map(argName => ({
+        name: argName,
+        description: `Argument '${argName}' for prompt ${name}`,
+        required: true
+    }));
+
+    try {
+        const response = await fetch('/admin/api/prompts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, description, arguments: args, template })
+        });
+        const res = await response.json();
+        if (!response.ok) throw new Error(res.error || 'Failed to save prompt');
+
+        closePromptModal();
+        loadPrompts();
+    } catch (err) {
+        alert('Error saving prompt: ' + err.message);
+    }
+}
+
+async function deletePrompt(id) {
+    if (!confirm('Are you sure you want to delete this prompt?')) return;
+    try {
+        const response = await fetch(`/admin/api/prompts/${id}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Failed to delete prompt');
+        loadPrompts();
+    } catch (err) {
+        alert('Error deleting prompt: ' + err.message);
+    }
+}
+

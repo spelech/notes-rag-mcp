@@ -114,6 +114,31 @@
                             </tbody>
                         </table>
                     </div>
+                <div class="glass-card prompts-card" style="margin-top: 24px;">
+                    <div class="card-header-btn">
+                        <h2><i class="fa-solid fa-wand-magic-sparkles"></i> Custom MCP Prompts</h2>
+                        <button class="btn btn-primary" onclick="openAddPromptModal()">
+                            <i class="fa-solid fa-plus"></i> Add Prompt
+                        </button>
+                    </div>
+                    
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Prompt Name</th>
+                                    <th>Description</th>
+                                    <th>Template Preview</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="prompts-list-body">
+                                <tr>
+                                    <td colspan="4" class="empty-state">Loading custom MCP prompts...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </section>
         </main>
@@ -122,6 +147,39 @@
             <p>WileyRiley Infrastructure &bull; Protected by TinyAuth Forward Auth &bull; 2026</p>
         </footer>
     </div>
+
+    <!-- Add Custom Prompt Modal -->
+    <div class="modal-backdrop" id="prompt-modal" style="display: none;">
+        <div class="glass-card modal-card" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2><i class="fa-solid fa-wand-magic-sparkles"></i> Add Custom MCP Prompt</h2>
+                <button class="btn-close" onclick="closePromptModal()">&times;</button>
+            </div>
+            
+            <form id="prompt-form" onsubmit="savePrompt(event)">
+                <div class="form-group">
+                    <label for="prompt-name">Prompt Name</label>
+                    <input type="text" id="prompt-name" required placeholder="e.g. search_security_audits">
+                </div>
+
+                <div class="form-group">
+                    <label for="prompt-desc">Description</label>
+                    <input type="text" id="prompt-desc" required placeholder="Workflow to search security audit notes and compliance docs.">
+                </div>
+
+                <div class="form-group">
+                    <label for="prompt-template">Prompt Message Template (Use {variable_name} placeholders)</label>
+                    <textarea id="prompt-template" rows="4" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 10px; border-radius: 6px; font-family: 'JetBrains Mono', monospace;" required placeholder="Please search the notes for security topic '{topic}' using search_notes and summarize compliance rules..."></textarea>
+                </div>
+
+                <div class="form-actions" style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn btn-secondary" onclick="closePromptModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Prompt</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
 
     <!-- Add/Edit Path Modal -->
     <div class="modal-backdrop" id="path-modal" style="display: none;">

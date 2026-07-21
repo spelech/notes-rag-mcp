@@ -110,7 +110,44 @@ def init_cache_db():
                 mtime REAL
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS custom_prompts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                description TEXT NOT NULL,
+                arguments_json TEXT,
+                template TEXT NOT NULL,
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         conn.commit()
+
+        # Seed default prompts if empty
+        try:
+            prompt_count = conn.execute("SELECT count(*) FROM custom_prompts").fetchone()[0]
+            if prompt_count == 0:
+                default_prompts = [
+                    (
+                        "search_infrastructure_docs",
+                        "Workflow to search system infrastructure documentation, container mappings, or network routes.",
+                        json.dumps([{"name": "topic", "description": "The specific infrastructure topic to search for (e.g. ports, caddy, authelia)", "required": True}]),
+                        "Please perform a search using the search_notes tool for topic '{topic}' and summarize the matching container mappings, port numbers, reverse proxy routes, or setup instructions."
+                    ),
+                    (
+                        "summarize_codebase_notes",
+                        "Workflow to summarize architecture notes and module documentation for a specific codebase area.",
+                        json.dumps([{"name": "area", "description": "Codebase feature area or component to summarize", "required": True}]),
+                        "Please search the notes for component '{area}' using search_notes and provide an architectural summary including key files, design patterns, and dependencies."
+                    )
+                ]
+                conn.executemany(
+                    "INSERT OR IGNORE INTO custom_prompts (name, description, arguments_json, template) VALUES (?, ?, ?, ?)",
+                    default_prompts
+                )
+                conn.commit()
+        except Exception as pe:
+            logger.error(f"Failed to seed default prompts: {pe}")
+
 
         # Seed default vault path if the configuration database has /notes or is empty
         try:
@@ -738,30 +775,59 @@ async def read_resource(uri: str) -> str:
 
 @mcp_server.list_prompts()
 async def list_prompts() -> List[Prompt]:
-    return [
-        Prompt(
-            name="search_infrastructure_docs",
-            description="Workflow to search system infrastructure documentation, container mappings, or network routes.",
-            arguments=[
-                PromptArgument(name="topic", description="The specific infrastructure topic to search for (e.g. ports, caddy, authelia)", required=True)
-            ]
-        )
-    ]
+    prompts = []
+    try:
+        with get_db_connection() as conn:
+            rows = conn.execute("SELECT name, description, arguments_json FROM custom_prompts ORDER BY name ASC").fetchall()
+        for r in rows:
+            args_list = []
+            if r["arguments_json"]:
+                try:
+                    parsed_args = json.loads(r["arguments_json"])
+                    for a in parsed_args:
+                        args_list.append(PromptArgument(
+                            name=a.get("name", ""),
+                            description=a.get("description", ""),
+                            required=a.get("required", False)
+                        ))
+                except Exception:
+                    pass
+            prompts.append(Prompt(
+                name=r["name"],
+                description=r["description"],
+                arguments=args_list
+            ))
+    except Exception as e:
+        logger.error(f"Error listing prompts from DB: {e}")
+    return prompts
 
 @mcp_server.get_prompt()
 async def get_prompt(name: str, arguments: dict = None) -> List[PromptMessage]:
-    if name == "search_infrastructure_docs":
-        topic = (arguments or {}).get("topic", "infrastructure")
+    arguments = arguments or {}
+    try:
+        with get_db_connection() as conn:
+            row = conn.execute("SELECT name, template, arguments_json FROM custom_prompts WHERE name = ?", (name,)).fetchone()
+        if not row:
+            raise ValueError(f"Unknown prompt name: {name}")
+        
+        template = row["template"]
+        formatted_text = template
+        for k, v in arguments.items():
+            formatted_text = formatted_text.replace(f"{{{k}}}", str(v))
+
         return [
             PromptMessage(
                 role="user",
                 content=TextContent(
                     type="text",
-                    text=f"Please perform a search using the search_notes tool for topic '{topic}' and summarize the matching container mappings, port numbers, reverse proxy routes, or setup instructions."
+                    text=formatted_text
                 )
             )
         ]
-    raise ValueError(f"Unknown prompt name: {name}")
+    except Exception as e:
+        logger.error(f"Error getting prompt '{name}': {e}")
+        raise ValueError(f"Failed to get prompt '{name}': {str(e)}")
+
 
 @mcp_server.call_tool()
 async def call_tool(name: str, arguments: dict) -> List[TextContent]:
@@ -996,6 +1062,66 @@ async def delete_path(path_id: int):
         return {"status": "success", "message": f"Deleted path: {path}"}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+# ----------------------------------------------------
+# CUSTOM MCP PROMPTS MANAGEMENT API
+# ----------------------------------------------------
+
+@app.get("/admin/api/prompts")
+async def get_prompts():
+    try:
+        with get_db_connection() as conn:
+            rows = conn.execute("SELECT id, name, description, arguments_json, template, added_at FROM custom_prompts ORDER BY name ASC").fetchall()
+            prompts = []
+            for r in rows:
+                d = dict(r)
+                try:
+                    d["arguments"] = json.loads(r["arguments_json"]) if r["arguments_json"] else []
+                except Exception:
+                    d["arguments"] = []
+                prompts.append(d)
+        return prompts
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/admin/api/prompts")
+async def add_prompt(request: Request):
+    try:
+        data = await request.json()
+        name = data.get("name", "").strip()
+        description = data.get("description", "").strip()
+        arguments = data.get("arguments", [])
+        template = data.get("template", "").strip()
+
+        if not name or not description or not template:
+            return JSONResponse(status_code=400, content={"error": "Name, description, and template are required."})
+
+        name = re.sub(r'[^a-zA-Z0-9_\-]', '_', name).lower()
+        arguments_json = json.dumps(arguments)
+
+        with get_db_connection() as conn:
+            conn.execute(
+                "INSERT INTO custom_prompts (name, description, arguments_json, template) VALUES (?, ?, ?, ?)",
+                (name, description, arguments_json, template)
+            )
+            conn.commit()
+
+        return {"status": "success", "message": f"Added custom prompt '{name}'"}
+    except sqlite3.IntegrityError:
+        return JSONResponse(status_code=400, content={"error": f"Prompt '{name}' already exists."})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.delete("/admin/api/prompts/{prompt_id}")
+async def delete_prompt(prompt_id: int):
+    try:
+        with get_db_connection() as conn:
+            conn.execute("DELETE FROM custom_prompts WHERE id = ?", (prompt_id,))
+            conn.commit()
+        return {"status": "success", "message": f"Deleted prompt ID {prompt_id}"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 
 @app.post("/admin/api/reindex")
 async def trigger_reindex():
