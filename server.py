@@ -694,7 +694,8 @@ def run_indexing():
 
 
 # Initialize MCP server
-mcp_server = Server("notes-rag-mcp", version="1.1.0")
+mcp_server = Server("notes-rag-mcp", version="1.2.0")
+
 
 
 @mcp_server.list_tools()

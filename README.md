@@ -109,13 +109,20 @@ Connect any MCP-compliant client (VS Code, Cursor, Antigravity CLI, or Claude De
 
 ## 📝 Changelog
 
+- **v1.2.0**:
+  - Added dynamic custom MCP prompt storage in SQLite (`custom_prompts` table).
+  - Seeded default infrastructure and codebase prompt templates on DB initialization.
+  - Implemented dynamic `@mcp_server.list_prompts()` and `@mcp_server.get_prompt()` handlers.
+  - Added prompt management REST APIs (`GET`, `POST`, `DELETE` `/admin/api/prompts`).
+  - Added Custom MCP Prompts card and modal to the Admin Dashboard.
 - **v1.1.0**:
   - Integrated FastEmbed in-process CPU local ONNX embedding engine (`BAAI/bge-small-en-v1.5`).
   - Added topic & keyword extraction engine (`file_summaries` SQLite table).
   - Implemented dynamic MCP tool description updates in `list_tools()` for improved discovery by gateway routers.
   - Added contextual chunk embeddings with document title and section breadcrumbs.
-  - Added MCP Resource (`notes://catalog/summary`) and Prompt (`search_infrastructure_docs`).
+  - Added MCP Resource (`notes://catalog/summary`).
   - Implemented GitHub Actions CI/CD docker build & publish workflow (`ghcr.io`).
   - Updated admin dashboard UI with Extracted Topics tag cloud and model engine indicator.
+
 - **v1.0.1**:
   - Updated Python MCP SDK SSE transport method to `connect_sse` for compatibility with modern MCP clients.
