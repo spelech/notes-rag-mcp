@@ -1,52 +1,98 @@
 # Notes RAG MCP Server
 
-A Model Context Protocol (MCP) server for semantic search over markdown notes and documentation. 
+[![Build and Publish Docker Image](https://github.com/spelech/notes-rag-mcp/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/spelech/notes-rag-mcp/actions/workflows/docker-publish.yml)
+[![Docker Image](https://img.shields.io/badge/ghcr.io-spelech%2Fnotes--rag--mcp-blue?logo=docker)](https://github.com/spelech/notes-rag-mcp/pkgs/container/notes-rag-mcp)
 
-This server indexes your markdown notes into a Qdrant vector database using embeddings (defaulting to LiteLLM), and provides semantic search capabilities as an MCP tool, allowing LLMs to seamlessly search and retrieve context from your personal knowledge base.
+A high-performance Model Context Protocol (MCP) server for semantic search, dynamic topic cataloging, and context retrieval over markdown notes and system documentation.
 
-## Features
-- **MCP Integration**: Exposes `search_notes`, `trigger_reindex`, and `index_status` tools.
-- **Smart Chunking**: Splits markdown files by headings, ensuring context is preserved in chunks.
-- **Incremental Indexing**: Uses SQLite to cache file modification times and Qdrant points, only re-indexing changed files.
-- **Web Dashboard**: Includes an admin dashboard at `/admin` for managing indexed paths, viewing stats, and triggering re-indexing manually.
-- **Parallel Processing**: Speeds up indexing using concurrent thread pools.
-- **Frontmatter Support**: Parses YAML frontmatter for tags, categories, and other metadata to enrich the vector payload.
+![Notes RAG Admin Dashboard](docs/assets/dashboard.jpg)
 
-## Tools Exposed
-- `search_notes`: Perform semantic search on markdown notes and documentation. Filters by query, folder, tag, and category.
-- `trigger_reindex`: Force an immediate directory scan to index new or updated files.
-- `index_status`: Get indexing statistics of the vault.
+---
 
-## Environment Variables
-- `QDRANT_URL`: URL to the Qdrant instance (default: `http://qdrant:6333`).
-- `LITELLM_URL`: URL to LiteLLM instance for embeddings (default: `http://litellm:4000/v1`).
-- `LITELLM_API_KEY`: API key for embeddings (default: `dummy`).
-- `EMBEDDING_MODEL`: Embedding model to use (default: `text-embedding-3-small`).
-- `COLLECTION_NAME`: Qdrant collection name (default: `notes_rag`).
-- `VAULT_PATH`: Default path to the markdown notes vault (default: `/containers/productivity/obsidian/shared`).
-- `CACHE_DB_PATH`: Path to SQLite index cache DB (default: `/app/data/index_cache.db`).
-- `CHUNK_SIZE`: Max characters per chunk (default: `1500`).
-- `CHUNK_OVERLAP`: Overlap between chunks (default: `200`).
+## 🌟 Key Features
 
-## Running
-Build and run the Docker container. Make sure to mount your markdown notes directory and a path for the persistent cache database:
-```sh
-docker build -t notes-rag-mcp .
+- **Local ONNX Embedding Engine (FastEmbed)**: In-process CPU-optimized vector embedding using models like `BAAI/bge-small-en-v1.5` (384 dimensions). Zero external network latency, zero API costs, and zero rate limits. Includes optional OpenAI / LiteLLM API fallback.
+- **Dynamic Topic & Keyword Extraction Engine**: Automatically tokenizes indexed documents, extracts section headings, frontmatter tags, categories, and high-frequency key concepts into a persistent SQLite index.
+- **Self-Describing Dynamic MCP Tools**: Dynamically updates the `search_notes` description in `tools/list` to list real document titles (e.g., `container_mapping.md`, `network_routes.md`) and key concepts. This allows semantic gateway routers (like `mcp-router`) to automatically match search queries to `notes-rag-mcp`.
+- **Contextual Chunk Embeddings**: Prepends document titles, folder paths, section headings, and tags directly to chunk text before embedding to maximize vector search accuracy for section titles and header queries.
+- **MCP Resources & Prompts**:
+  - **Resource**: `notes://catalog/summary` — Returns a comprehensive markdown table catalog of indexed files, categories, tags, and key concepts.
+  - **Prompt**: `search_infrastructure_docs` — Ready-made prompt workflow to query system architecture, container mappings, or network routes.
+- **Incremental & Concurrent Indexing**: SQLite cache avoids re-embedding unchanged files, while multi-threaded thread pools parallelize processing.
+- **Dark-Mode Admin Dashboard**: Built-in glassmorphic UI at `/admin/` featuring real-time RAG statistics, path management, interactive directory browser, and a live topic tag cloud.
 
-# Replace /path/to/notes with the actual path to your markdown files
+---
+
+## 🛠️ Tools, Resources & Prompts
+
+### Tools
+- `search_notes`: Perform semantic search across indexed documentation, notes, and codebase files. Accepts natural language `query`, optional `folder`, `tag`, `category`, and `limit`.
+- `trigger_reindex`: Force an immediate scan of configured source directories to index new or updated files.
+- `index_status`: Get indexing statistics, active embedding provider (`LOCAL` vs `API`), and collection details.
+
+### Resources
+- `notes://catalog/summary`: Markdown catalog listing all active documents, categories, tags, and top key concepts.
+
+### Prompts
+- `search_infrastructure_docs`: Automated prompt template to assist LLM agents in querying infrastructure documentation.
+
+---
+
+## ⚙️ Environment Variables
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `EMBEDDING_PROVIDER` | Embedding engine (`local` for in-process ONNX, `api` for LiteLLM/OpenAI) | `local` |
+| `EMBEDDING_MODEL` | FastEmbed or API embedding model name | `BAAI/bge-small-en-v1.5` |
+| `QDRANT_URL` | URL to the Qdrant vector database | `http://qdrant:6333` |
+| `LITELLM_URL` | Base URL for OpenAI/LiteLLM API fallback | `http://litellm:4000/v1` |
+| `LITELLM_API_KEY` | API Key for embeddings | `dummy` |
+| `COLLECTION_NAME` | Qdrant collection name | `notes_rag` |
+| `VAULT_PATH` | Default path to the markdown documentation directory | `/docs` |
+| `CACHE_DB_PATH` | Path to persistent SQLite cache database | `/app/data/index_cache.db` |
+| `CHUNK_SIZE` | Maximum character length per text chunk | `1500` |
+| `CHUNK_OVERLAP` | Character overlap between consecutive chunks | `200` |
+
+---
+
+## 🚀 Running via Docker
+
+### Using Pre-built Container (GHCR)
+```bash
 docker run -d \
+  --name notes-rag-mcp \
   -p 3000:3000 \
-  --env-file .env \
-  -v /path/to/notes:/notes:ro \
+  -e EMBEDDING_PROVIDER=local \
+  -v /path/to/my/docs:/docs:ro \
   -v ./data:/app/data \
-  notes-rag-mcp
+  ghcr.io/spelech/notes-rag-mcp:latest
 ```
-*Note: Make sure to update the `VAULT_PATH` environment variable to match the internal mounted path (e.g. `/notes`).*
 
-## Connecting MCP Clients
-Since this server runs via HTTP with Server-Sent Events (SSE), you can configure your AI client (like Claude Desktop or Gemini) to connect to the `/sse` endpoint. 
+### Docker Compose
+```yaml
+services:
+  notes-rag-mcp:
+    image: ghcr.io/spelech/notes-rag-mcp:latest
+    container_name: notes-rag-mcp
+    restart: unless-stopped
+    ports:
+      - "8021:3000"
+    environment:
+      - EMBEDDING_PROVIDER=local
+      - EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+      - QDRANT_URL=http://qdrant:6333
+      - VAULT_PATH=/docs
+    volumes:
+      - /path/to/my/docs:/docs:ro
+      - ./data:/app/data
+```
 
-Example configuration for an MCP client `settings.json`:
+---
+
+## 📡 Connecting MCP Clients
+
+Connect any MCP-compliant client (VS Code, Cursor, Antigravity CLI, or Claude Desktop) to the Server-Sent Events (SSE) endpoint:
+
 ```json
 {
   "mcpServers": {
@@ -59,5 +105,17 @@ Example configuration for an MCP client `settings.json`:
 }
 ```
 
-## Changelog
-- **v1.0.1**: Updated Python MCP SDK SSE transport method from `connect_retrying` to `connect_sse` to fix `AttributeError` during initialization and ensure compatibility with modern MCP clients.
+---
+
+## 📝 Changelog
+
+- **v1.1.0**:
+  - Integrated FastEmbed in-process CPU local ONNX embedding engine (`BAAI/bge-small-en-v1.5`).
+  - Added topic & keyword extraction engine (`file_summaries` SQLite table).
+  - Implemented dynamic MCP tool description updates in `list_tools()` for improved discovery by gateway routers.
+  - Added contextual chunk embeddings with document title and section breadcrumbs.
+  - Added MCP Resource (`notes://catalog/summary`) and Prompt (`search_infrastructure_docs`).
+  - Implemented GitHub Actions CI/CD docker build & publish workflow (`ghcr.io`).
+  - Updated admin dashboard UI with Extracted Topics tag cloud and model engine indicator.
+- **v1.0.1**:
+  - Updated Python MCP SDK SSE transport method to `connect_sse` for compatibility with modern MCP clients.
